@@ -26,6 +26,7 @@ extern "C" {
 
 enum {
 	AUTOLINK_SHORT_DOMAINS = (1 << 0),
+	AUTOLINK_STOP_AT_UNMATCHED_PAREN = (1 << 1),
 };
 
 struct autolink_pos {

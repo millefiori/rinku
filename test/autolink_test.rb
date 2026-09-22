@@ -442,4 +442,53 @@ This is just a test. <a href="http://www.pokemon.com">http://www.pokemon.com</a>
   def test_regression_84
     assert_linked "<a href=\"https://www.keepright.atの情報をもとにエラー修正\">https://www.keepright.atの情報をもとにエラー修正</a>", "https://www.keepright.atの情報をもとにエラー修正"
   end
+
+  STOP_AT_UNMATCHED_PAREN = Rinku::AUTOLINK_SHORT_DOMAINS | Rinku::AUTOLINK_STOP_AT_UNMATCHED_PAREN
+
+  def autolink_stopping_at_unmatched_paren(text)
+    Rinku.auto_link(text, nil, nil, nil, STOP_AT_UNMATCHED_PAREN)
+  end
+
+  def test_stop_at_unmatched_paren
+    assert_equal %{[a](<a href="https://example.com/a">https://example.com/a</a>)b},
+      autolink_stopping_at_unmatched_paren("[a](https://example.com/a)b")
+
+    assert_equal %{<a href="http://www.example.com/a">www.example.com/a</a>)b},
+      autolink_stopping_at_unmatched_paren("www.example.com/a)b")
+  end
+
+  def test_stop_at_unmatched_paren_keeps_balanced_parens
+    url = "https://en.wikipedia.org/wiki/Foo_(bar)x"
+
+    assert_equal %{<a href="#{url}">#{url}</a>}, autolink_stopping_at_unmatched_paren(url)
+  end
+
+  def test_stop_at_unmatched_paren_finds_every_link_on_a_line_without_spaces
+    text = (1..50).map { |i| "[#{i}](https://example.com/#{i})" }.join(",")
+
+    assert_equal 50, autolink_stopping_at_unmatched_paren(text).scan("<a href").size
+  end
+
+  # A correctly encoded U+FFFD decodes to the same value read_cp() returns for an
+  # undecodable byte; treating it as the end of the buffer would drop every link after it
+  def test_stop_at_unmatched_paren_keeps_scanning_past_a_replacement_character
+    text = "[a](https://example.com/\u{FFFD})b [c](https://example.com/c)d"
+
+    assert_equal 2, autolink_stopping_at_unmatched_paren(text).scan("<a href").size
+  end
+
+  # Deciding the end of the link in a separate scan makes this quadratic: 30s instead of 2ms
+  def test_stop_at_unmatched_paren_scans_a_line_of_links_once
+    text = (1..4_000).map { |i| "[#{i}](https://example.com/#{i})" }.join(",")
+
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    assert_equal 4_000, autolink_stopping_at_unmatched_paren(text).scan("<a href").size
+    assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :<, 1.0
+  end
+
+  def test_stop_at_unmatched_paren_is_opt_in
+    assert_equal %{[a](<a href="https://example.com/a)b">https://example.com/a)b</a>},
+      Rinku.auto_link("[a](https://example.com/a)b", nil, nil, nil, Rinku::AUTOLINK_SHORT_DOMAINS)
+  end
+
 end

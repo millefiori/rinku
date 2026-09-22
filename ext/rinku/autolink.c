@@ -202,6 +202,52 @@ check_domain(const uint8_t *data, size_t size,
 	}
 }
 
+/* Used for AUTOLINK_STOP_AT_UNMATCHED_PAREN.
+ *
+ * Finding the end of the link and finding the first unbalanced closing paren
+ * is done in a single scan on purpose: running utf8proc_find_space() to the
+ * end of the line first and cutting back afterwards makes every link on a
+ * line without spaces scan to the end of that line, which is quadratic in the
+ * number of links on the line.
+ *
+ * Unlike utf8proc_find_space() this stops on a byte that does not decode
+ * rather than on the replacement character: read_cp() returns U+FFFD both for
+ * an undecodable byte and for a correctly encoded U+FFFD, and treating a
+ * literal U+FFFD in the text as the end of the buffer would swallow every
+ * link that follows it on the line. */
+static size_t
+find_space_or_unmatched_paren(const uint8_t *data, size_t pos, size_t size)
+{
+	int depth = 0;
+
+	while (pos < size) {
+		const size_t last = pos;
+		int32_t uc = utf8proc_next(data, &pos);
+
+		if (pos == last)
+			return size;
+		if (utf8proc_is_space(uc))
+			return last;
+		if (uc == '(')
+			depth++;
+		else if (uc == ')') {
+			if (depth == 0)
+				return last;
+			depth--;
+		}
+	}
+
+	return size;
+}
+
+static size_t
+find_link_end(const uint8_t *data, size_t pos, size_t size, unsigned int flags)
+{
+	return (flags & AUTOLINK_STOP_AT_UNMATCHED_PAREN)
+		? find_space_or_unmatched_paren(data, pos, size)
+		: utf8proc_find_space(data, pos, size);
+}
+
 bool
 autolink__www(
 	struct autolink_pos *link,
@@ -231,7 +277,8 @@ autolink__www(
 	if (!check_domain(data, size, link, false))
 		return false;
 
-	link->end = utf8proc_find_space(data, link->end, size);
+	link->end = find_link_end(data, link->end, size, flags);
+
 	return autolink_delim_iter(data, link);
 }
 
@@ -304,7 +351,7 @@ autolink__url(
 		return false;
 
 	link->start = pos;
-	link->end = utf8proc_find_space(data, link->end, size);
+	link->end = find_link_end(data, link->end, size, flags);
 
 	while (link->start && rinku_isalpha(data[link->start - 1]))
 		link->start--;

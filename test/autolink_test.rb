@@ -477,13 +477,23 @@ This is just a test. <a href="http://www.pokemon.com">http://www.pokemon.com</a>
     assert_equal 2, autolink_stopping_at_unmatched_paren(text).scan("<a href").size
   end
 
-  # Deciding the end of the link in a separate scan makes this quadratic: 30s instead of 2ms
+  # Deciding the end of the link in a separate scan makes this quadratic: 3s instead of 3ms
   def test_stop_at_unmatched_paren_scans_a_line_of_links_once
-    text = (1..4_000).map { |i| "[#{i}](https://example.com/#{i})" }.join(",")
+    text = (1..8_000).map { |i| "[#{i}](https://example.com/#{i})" }.join(",")
 
     started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-    assert_equal 4_000, autolink_stopping_at_unmatched_paren(text).scan("<a href").size
-    assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :<, 1.0
+    assert_equal 8_000, autolink_stopping_at_unmatched_paren(text).scan("<a href").size
+    assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :<, 0.5
+  end
+
+  # Checking the scheme after the end of the link has been found makes every candidate with an
+  # unusable scheme scan to the end of the line: 2s instead of 2ms
+  def test_stop_at_unmatched_paren_rejects_unusable_schemes_without_scanning
+    text = "(https://example.com/a)xhttps://example.com/b" * 8_000
+
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    assert_equal 8_000, autolink_stopping_at_unmatched_paren(text).scan("<a href").size
+    assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :<, 0.5
   end
 
   def test_stop_at_unmatched_paren_is_opt_in

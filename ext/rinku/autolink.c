@@ -351,13 +351,17 @@ autolink__url(
 		return false;
 
 	link->start = pos;
-	link->end = find_link_end(data, link->end, size, flags);
 
 	while (link->start && rinku_isalpha(data[link->start - 1]))
 		link->start--;
 
+	/* Rejecting the candidate before looking for the end of the link keeps a run of
+	 * candidates with an unusable scheme (`xhttps://…`) from scanning to the end of
+	 * the line each. autolink_issafe() only reads from link->start. */
 	if (!autolink_issafe(data + link->start, size - link->start))
 		return false;
+
+	link->end = find_link_end(data, link->end, size, flags);
 
 	return autolink_delim_iter(data, link);
 }
